@@ -108,7 +108,7 @@
 
 <script>
 // ============================================================
-// 黑白棋 · 网页版（AI 强制同步版）
+// 黑白棋 · 网页版（AI 支持双色）
 // ============================================================
 
 const canvas = document.getElementById('boardCanvas');
@@ -123,7 +123,7 @@ let winner = null;
 let legalMoves = [];
 let mode = 'medium';
 let aiThinking = false;
-let playerSide = 'black';
+let playerSide = 'black'; // 'black' 或 'white'
 
 const blackScoreSpan = document.getElementById('blackScore');
 const whiteScoreSpan = document.getElementById('whiteScore');
@@ -220,27 +220,27 @@ function initGame() {
     aiThinking = false;
     render();
 
-    // ===== 选白棋：强制 AI 先走 =====
+    // 选白棋 → AI 执黑先走
     if (mode !== 'pvp' && playerSide === 'white') {
-        // 等待 200ms 确保渲染完成，然后强制走棋
         setTimeout(function() {
-            if (!gameOver && currentPlayer === 'white') {
-                aiPlayNow();
+            if (!gameOver && currentPlayer === 'black') {
+                aiPlayForColor('black');
             }
-        }, 200);
+        }, 300);
     }
 }
 
-// ========== AI 同步执行版 ==========
+// ========== AI 通用（支持黑/白） ==========
 
-function simulateMove(row, col) {
+function simulateMoveForColor(row, col, color) {
     const oldBoard = board.map(row => [...row]);
-    board[row][col] = 'white';
-    const flips = getFlipPositions(row, col, 'white');
-    for (const [r, c] of flips) board[r][c] = 'white';
+    board[row][col] = color;
+    const flips = getFlipPositions(row, col, color);
+    for (const [r, c] of flips) board[r][c] = color;
+    const opponent = getOpponent(color);
     let score = 0;
-    for (const [r, c] of getLegalMoves('black')) {
-        const f = getFlipPositions(r, c, 'black');
+    for (const [r, c] of getLegalMoves(opponent)) {
+        const f = getFlipPositions(r, c, opponent);
         let s = f.length;
         if (isCorner(r, c)) s += 10;
         else if (isSide(r, c)) s += 4;
@@ -250,13 +250,13 @@ function simulateMove(row, col) {
     return score;
 }
 
-function aiPlayNow() {
+function aiPlayForColor(color) {
     if (gameOver) return;
-    if (currentPlayer !== 'white') return;
+    if (currentPlayer !== color) return;
 
-    const moves = getLegalMoves('white');
+    const moves = getLegalMoves(color);
     if (!moves.length) {
-        currentPlayer = 'black';
+        currentPlayer = getOpponent(color);
         render();
         return;
     }
@@ -265,25 +265,26 @@ function aiPlayNow() {
     for (const [r, c] of moves) {
         let s;
         if (mode === 'easy') {
-            s = getFlipPositions(r, c, 'white').length;
+            s = getFlipPositions(r, c, color).length;
         } else if (mode === 'medium') {
-            s = getFlipPositions(r, c, 'white').length - simulateMove(r, c) * 0.8 + posScore(r, c);
+            s = getFlipPositions(r, c, color).length - simulateMoveForColor(r, c, color) * 0.8 + posScore(r, c);
         } else {
             const oldBoard = board.map(row => [...row]);
-            board[r][c] = 'white';
-            const flips = getFlipPositions(r, c, 'white');
-            for (const [fr, fc] of flips) board[fr][fc] = 'white';
+            board[r][c] = color;
+            const flips = getFlipPositions(r, c, color);
+            for (const [fr, fc] of flips) board[fr][fc] = color;
             let myScore = flips.length + posScore(r, c);
+            const opponent = getOpponent(color);
             let oppBest = -9999;
-            const oppMoves = getLegalMoves('black');
+            const oppMoves = getLegalMoves(opponent);
             for (const [or2, oc2] of oppMoves) {
-                const oppFlips = getFlipPositions(or2, oc2, 'black');
+                const oppFlips = getFlipPositions(or2, oc2, opponent);
                 let oppScore = oppFlips.length + posScore(or2, oc2);
                 if (oppScore > oppBest) oppBest = oppScore;
             }
             let oppNextBest = -9999;
-            for (const [or2, oc2] of getLegalMoves('black')) {
-                const oppNextScore = getFlipPositions(or2, oc2, 'black').length + posScore(or2, oc2);
+            for (const [or2, oc2] of getLegalMoves(opponent)) {
+                const oppNextScore = getFlipPositions(or2, oc2, opponent).length + posScore(or2, oc2);
                 if (oppNextScore > oppNextBest) oppNextBest = oppNextScore;
             }
             s = myScore - oppBest * 0.8;
@@ -295,9 +296,9 @@ function aiPlayNow() {
             bestMove = [r, c];
         }
     }
-    if (bestMove && makeMove(bestMove[0], bestMove[1], 'white')) {
+    if (bestMove && makeMove(bestMove[0], bestMove[1], color)) {
         if (!checkGameOver()) {
-            currentPlayer = 'black';
+            currentPlayer = getOpponent(color);
             legalMoves = getLegalMoves(currentPlayer);
             if (!legalMoves.length) {
                 const opp = getOpponent(currentPlayer);
@@ -307,8 +308,9 @@ function aiPlayNow() {
                 } else {
                     currentPlayer = opp;
                     legalMoves = om;
-                    if (currentPlayer === 'white') {
-                        aiPlayNow();
+                    // 如果轮到 AI，继续走（AI 只走 white，但我们已经通用）
+                    if (currentPlayer === color) {
+                        aiPlayForColor(color);
                         return;
                     }
                 }
@@ -318,13 +320,13 @@ function aiPlayNow() {
     render();
 }
 
-// 保留旧 aiPlay 用于点击触发的场景
+// 点击触发的 AI（玩家走黑棋后，AI 走白棋）
 function aiPlay() {
     if (aiThinking || gameOver) return;
     if (currentPlayer !== 'white') return;
     aiThinking = true;
     setTimeout(() => {
-        aiPlayNow();
+        aiPlayForColor('white');
         aiThinking = false;
     }, 50);
 }
@@ -408,6 +410,7 @@ function render() {
 canvas.addEventListener('click', (e) => {
     if (gameOver || aiThinking) return;
     if (mode !== 'pvp') {
+        // 只有玩家侧才能点击
         if (currentPlayer !== playerSide) return;
     }
     const rect = canvas.getBoundingClientRect();
@@ -436,6 +439,7 @@ canvas.addEventListener('click', (e) => {
             }
         }
         render();
+        // AI 回合（AI 只走白棋）
         if (!gameOver && currentPlayer === 'white') {
             aiPlay();
         }
