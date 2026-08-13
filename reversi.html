@@ -63,6 +63,7 @@
             gap: 12px;
             margin-top: 12px;
             justify-content: center;
+            flex-wrap: wrap;
         }
         .controls button {
             background: #1a3a5e;
@@ -84,6 +85,10 @@
             background: #5a3a3a;
             box-shadow: 0 4px 0 #2a1a1a;
         }
+        .controls button.side-btn {
+            background: #2a5a3a;
+            box-shadow: 0 4px 0 #1a2a1a;
+        }
     </style>
 </head>
 <body>
@@ -96,16 +101,15 @@
     </div>
     <div class="controls">
         <button id="restartBtn">🔄 重开</button>
+        <button id="sideBtn" class="side-btn">🎯 选方</button>
         <button id="menuBtn" class="menu">📋 菜单</button>
     </div>
 </div>
 
 <script>
 // ============================================================
-// 黑白棋 · 网页版
-// 困难 AI 已修复：
-// 1. 主动堵你下一步占角
-// 2. 你没棋走时自动跳过，AI 继续走
+// 黑白棋 · 网页版（完整版）
+// 选方功能：玩家可以选择执黑（先手）或执白（后手）
 // ============================================================
 
 const canvas = document.getElementById('boardCanvas');
@@ -120,6 +124,7 @@ let winner = null;
 let legalMoves = [];
 let mode = 'medium';
 let aiThinking = false;
+let playerSide = 'black';  // 'black' 或 'white'
 
 const blackScoreSpan = document.getElementById('blackScore');
 const whiteScoreSpan = document.getElementById('whiteScore');
@@ -214,6 +219,13 @@ function initGame() {
     winner = null;
     legalMoves = getLegalMoves(currentPlayer);
     aiThinking = false;
+
+    // 如果玩家选白棋（AI 先走），让 AI 走第一步
+    if (mode !== 'pvp' && playerSide === 'white') {
+        setTimeout(() => {
+            aiPlay();
+        }, 300);
+    }
     render();
 }
 
@@ -237,7 +249,9 @@ function simulateMove(row, col) {
 }
 
 function aiPlay() {
-    if (aiThinking || gameOver || currentPlayer !== 'white') return;
+    if (aiThinking || gameOver) return;
+    // AI 只走白棋
+    if (currentPlayer !== 'white') return;
     aiThinking = true;
     setTimeout(() => {
         const moves = getLegalMoves('white');
@@ -256,7 +270,6 @@ function aiPlay() {
             } else if (mode === 'medium') {
                 s = getFlipPositions(r, c, 'white').length - simulateMove(r, c) * 0.8 + posScore(r, c);
             } else {
-                // ===== 困难 AI（完整版） =====
                 const oldBoard = board.map(row => [...row]);
                 board[r][c] = 'white';
                 const flips = getFlipPositions(r, c, 'white');
@@ -269,14 +282,12 @@ function aiPlay() {
                     let oppScore = oppFlips.length + posScore(or2, oc2);
                     if (oppScore > oppBest) oppBest = oppScore;
                 }
-                // ===== 新增：检测对手下一步是否能走角 =====
                 let oppNextBest = -9999;
                 for (const [or2, oc2] of getLegalMoves('black')) {
                     const oppNextScore = getFlipPositions(or2, oc2, 'black').length + posScore(or2, oc2);
                     if (oppNextScore > oppNextBest) oppNextBest = oppNextScore;
                 }
                 s = myScore - oppBest * 0.8;
-                // 如果对手下一步能走角，大幅度扣分
                 if (oppNextBest >= 10) s -= 20;
                 board = oldBoard;
             }
@@ -289,7 +300,6 @@ function aiPlay() {
             if (!checkGameOver()) {
                 currentPlayer = 'black';
                 legalMoves = getLegalMoves(currentPlayer);
-                // 检查黑棋是否有合法走法，没有则跳过
                 if (!legalMoves.length) {
                     const opp = getOpponent(currentPlayer);
                     const om = getLegalMoves(opp);
@@ -298,7 +308,6 @@ function aiPlay() {
                     } else {
                         currentPlayer = opp;
                         legalMoves = om;
-                        // 如果轮到白棋（AI），继续走
                         if (currentPlayer === 'white') {
                             aiThinking = false;
                             aiPlay();
@@ -392,6 +401,10 @@ function render() {
 
 canvas.addEventListener('click', (e) => {
     if (gameOver || aiThinking) return;
+    // 非 PVP 模式下，只有玩家回合才能点击
+    if (mode !== 'pvp') {
+        if (currentPlayer !== playerSide) return;
+    }
     const rect = canvas.getBoundingClientRect();
     const scale = canvas.width / rect.width;
     const x = (e.clientX - rect.left) * scale;
@@ -406,12 +419,9 @@ canvas.addEventListener('click', (e) => {
             if (getLegalMoves(opp).length) {
                 currentPlayer = opp;
             } else {
-                // 对手无棋可走，跳过
                 if (getLegalMoves(currentPlayer).length === 0) {
                     checkGameOver();
                 } else {
-                    // 跳过对手回合，当前玩家继续
-                    // 但当前玩家已经是 opp，要换回来
                     currentPlayer = opp;
                     const nextMoves = getLegalMoves(currentPlayer);
                     if (nextMoves.length === 0) {
@@ -421,7 +431,6 @@ canvas.addEventListener('click', (e) => {
             }
         }
         render();
-        // 如果轮到白棋（AI）且游戏未结束，触发 AI
         if (!gameOver && currentPlayer === 'white') {
             aiPlay();
         }
@@ -443,12 +452,31 @@ function showMenu() {
     if (diff === '1') mode = 'easy';
     else if (diff === '3') mode = 'hard';
     else mode = 'medium';
+    // 默认玩家执黑
+    playerSide = 'black';
     initGame();
     render();
 }
 
+function showSideMenu() {
+    const choice = confirm('🎯 选择执方：\n\n「确定」→ 执黑（先手）\n「取消」→ 执白（后手）');
+    if (choice) {
+        playerSide = 'black';
+    } else {
+        playerSide = 'white';
+    }
+    // 重新开始游戏
+    if (mode !== 'pvp') {
+        initGame();
+        render();
+    } else {
+        alert('双人模式下无法选方，请切换到 AI 模式');
+    }
+}
+
 document.getElementById('restartBtn').addEventListener('click', () => { initGame(); render(); });
 document.getElementById('menuBtn').addEventListener('click', showMenu);
+document.getElementById('sideBtn').addEventListener('click', showSideMenu);
 
 initGame();
 render();
