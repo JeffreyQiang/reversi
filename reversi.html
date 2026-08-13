@@ -103,7 +103,7 @@
 
 <script>
 // ============================================================
-// 黑白棋 · 完整版（双人 + AI 三档，双人已修复）
+// 黑白棋 · 双人/AI 彻底分离版
 // ============================================================
 
 const canvas = document.getElementById('boardCanvas');
@@ -116,7 +116,7 @@ let currentPlayer = 'black';
 let gameOver = false;
 let winner = null;
 let legalMoves = [];
-let mode = 'medium';
+let mode = 'medium';    // 'pvp', 'easy', 'medium', 'hard'
 let aiThinking = false;
 
 const blackScoreSpan = document.getElementById('blackScore');
@@ -377,44 +377,68 @@ function render() {
     whiteScoreSpan.textContent = cnt.white;
     const turnName = currentPlayer === 'black' ? '⚫ 黑棋' : '⚪ 白棋';
     turnIndicator.textContent = gameOver ? '🏁 已结束' : turnName + ' 回合';
-    const modeNames = { easy: '🤖 简单', medium: '🤖 中等', hard: '🤖 困难' };
+    const modeNames = { pvp: '👥 双人', easy: '🤖 简单', medium: '🤖 中等', hard: '🤖 困难' };
     modeBadge.textContent = modeNames[mode] || '🤖 中等';
 }
 
 // ========== 事件 ==========
 
-canvas.addEventListener('click', (e) => {
+// ----- 双人模式的点击处理 -----
+function handlePvpClick(row, col) {
     if (gameOver || aiThinking) return;
-    // 非双人模式下玩家只能走黑棋
-    if (mode !== 'pvp' && currentPlayer !== 'black') return;
-    // 双人模式下黑白都能走，不加限制
-
-    const rect = canvas.getBoundingClientRect();
-    const scale = canvas.width / rect.width;
-    const x = (e.clientX - rect.left) * scale;
-    const y = (e.clientY - rect.top) * scale;
-    const col = Math.floor(x / CELL);
-    const row = Math.floor(y / CELL);
-    if (row < 0 || row >= SIZE || col < 0 || col >= SIZE) return;
     if (!legalMoves.some(([r, c]) => r === row && c === col)) return;
 
     if (makeMove(row, col, currentPlayer)) {
-        // 切换玩家（含跳过）
         let next = getOpponent(currentPlayer);
         if (getLegalMoves(next).length > 0) {
             currentPlayer = next;
         } else {
             if (getLegalMoves(currentPlayer).length === 0) {
                 checkGameOver();
-            } else {
-                // 对手无棋，保持当前玩家不变
+            }
+            // 否则当前玩家继续（对手无棋可走，跳过）
+        }
+        render();
+    }
+}
+
+// ----- AI 模式的点击处理（玩家执黑，AI 执白） -----
+function handleAiClick(row, col) {
+    if (gameOver || aiThinking) return;
+    if (currentPlayer !== 'black') return; // AI 模式下玩家只能走黑棋
+    if (!legalMoves.some(([r, c]) => r === row && c === col)) return;
+
+    if (makeMove(row, col, currentPlayer)) {
+        let next = getOpponent(currentPlayer);
+        if (getLegalMoves(next).length > 0) {
+            currentPlayer = next;
+        } else {
+            if (getLegalMoves(currentPlayer).length === 0) {
+                checkGameOver();
             }
         }
         render();
-        // 关键修复：只在 AI 模式（非双人）且轮到白棋时触发 AI
-        if (mode !== 'pvp' && !gameOver && currentPlayer === 'white') {
+        // 只有 AI 模式且轮到白棋时才触发 AI
+        if (!gameOver && currentPlayer === 'white') {
             aiPlay();
         }
+    }
+}
+
+canvas.addEventListener('click', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const scale = canvas.width / rect.width;
+    const x = (e.clientX - rect.left) * scale;
+    const y = (e.clientY - rect.top) * scale;
+    const col = Math.round(x / CELL);
+    const row = Math.round(y / CELL);
+    if (row < 0 || row >= SIZE || col < 0 || col >= SIZE) return;
+
+    // 根据模式分流
+    if (mode === 'pvp') {
+        handlePvpClick(row, col);
+    } else {
+        handleAiClick(row, col);
     }
 });
 
@@ -430,7 +454,6 @@ function showMenu() {
     const choice = confirm('🎮 选择模式：\n\n「确定」→ 双人对战\n「取消」→ AI 难度选择');
     if (choice) {
         mode = 'pvp';
-        // 重置游戏，并确保双人模式下不会触发 AI
         initGame();
         render();
         return;
