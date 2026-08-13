@@ -103,7 +103,7 @@
 
 <script>
 // ============================================================
-// 黑白棋 · 无选方稳定版（玩家执黑，AI执白）
+// 黑白棋 · 完整版（双人 + AI 三档，双人已修复）
 // ============================================================
 
 const canvas = document.getElementById('boardCanvas');
@@ -385,8 +385,9 @@ function render() {
 
 canvas.addEventListener('click', (e) => {
     if (gameOver || aiThinking) return;
-    // 玩家只能走黑棋
+    // 非双人模式下玩家只能走黑棋
     if (mode !== 'pvp' && currentPlayer !== 'black') return;
+    // 双人模式下黑白都能走，不加限制
 
     const rect = canvas.getBoundingClientRect();
     const scale = canvas.width / rect.width;
@@ -407,12 +408,11 @@ canvas.addEventListener('click', (e) => {
                 checkGameOver();
             } else {
                 // 对手无棋，保持当前玩家不变
-                // 实际上应该跳过对手回合，即 currentPlayer 不变
-                // 但此处 currentPlayer 已经是原来的，所以不改变
             }
         }
         render();
-        if (!gameOver && currentPlayer === 'white') {
+        // ⭐ 修复：只在非双人模式下触发 AI
+        if (mode !== 'pvp' && !gameOver && currentPlayer === 'white') {
             aiPlay();
         }
     }
@@ -428,7 +428,12 @@ document.addEventListener('keydown', (e) => {
 
 function showMenu() {
     const choice = confirm('🎮 选择模式：\n\n「确定」→ 双人对战\n「取消」→ AI 难度选择');
-    if (choice) { mode = 'pvp'; initGame(); render(); return; }
+    if (choice) {
+        mode = 'pvp';
+        initGame();
+        render();
+        return;
+    }
     const diff = prompt('🤖 选 AI 难度 (1简单 2中等 3困难):', '2');
     if (diff === '1') mode = 'easy';
     else if (diff === '3') mode = 'hard';
