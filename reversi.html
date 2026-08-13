@@ -108,7 +108,7 @@
 
 <script>
 // ============================================================
-// 黑白棋 · 网页版（AI 修复版）
+// 黑白棋 · 网页版（AI 强制同步版）
 // ============================================================
 
 const canvas = document.getElementById('boardCanvas');
@@ -220,17 +220,18 @@ function initGame() {
     aiThinking = false;
     render();
 
-    // 选白棋时，等 500ms 后 AI 先走
+    // ===== 选白棋：强制 AI 先走 =====
     if (mode !== 'pvp' && playerSide === 'white') {
-        setTimeout(() => {
-            if (!gameOver && currentPlayer === 'white' && !aiThinking) {
-                aiPlay();
+        // 等待 200ms 确保渲染完成，然后强制走棋
+        setTimeout(function() {
+            if (!gameOver && currentPlayer === 'white') {
+                aiPlayNow();
             }
-        }, 500);
+        }, 200);
     }
 }
 
-// ========== AI ==========
+// ========== AI 同步执行版 ==========
 
 function simulateMove(row, col) {
     const oldBoard = board.map(row => [...row]);
@@ -249,15 +250,13 @@ function simulateMove(row, col) {
     return score;
 }
 
-function aiPlay() {
-    if (aiThinking || gameOver) return;
+function aiPlayNow() {
+    if (gameOver) return;
     if (currentPlayer !== 'white') return;
-    aiThinking = true;
 
     const moves = getLegalMoves('white');
     if (!moves.length) {
         currentPlayer = 'black';
-        aiThinking = false;
         render();
         return;
     }
@@ -309,17 +308,25 @@ function aiPlay() {
                     currentPlayer = opp;
                     legalMoves = om;
                     if (currentPlayer === 'white') {
-                        aiThinking = false;
-                        aiPlay();
-                        render();
+                        aiPlayNow();
                         return;
                     }
                 }
             }
         }
     }
-    aiThinking = false;
     render();
+}
+
+// 保留旧 aiPlay 用于点击触发的场景
+function aiPlay() {
+    if (aiThinking || gameOver) return;
+    if (currentPlayer !== 'white') return;
+    aiThinking = true;
+    setTimeout(() => {
+        aiPlayNow();
+        aiThinking = false;
+    }, 50);
 }
 
 // ========== 渲染 ==========
