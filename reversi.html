@@ -108,7 +108,7 @@
 
 <script>
 // ============================================================
-// 黑白棋 · 网页版（选方功能修复）
+// 黑白棋 · 网页版（选方功能修复 + async 强制等待）
 // ============================================================
 
 const canvas = document.getElementById('boardCanvas');
@@ -124,6 +124,7 @@ let legalMoves = [];
 let mode = 'medium';
 let aiThinking = false;
 let playerSide = 'black';
+let pendingAI = false;
 
 const blackScoreSpan = document.getElementById('blackScore');
 const whiteScoreSpan = document.getElementById('whiteScore');
@@ -218,16 +219,27 @@ function initGame() {
     winner = null;
     legalMoves = getLegalMoves(currentPlayer);
     aiThinking = false;
+    pendingAI = false;
     render();
 
-    // 如果玩家选白棋，让 AI 先走
+    // 选白棋时，等渲染完成后再触发 AI
     if (mode !== 'pvp' && playerSide === 'white') {
-        setTimeout(() => {
-            if (!gameOver && currentPlayer === 'white') {
-                aiPlay();
-            }
-        }, 300);
+        pendingAI = true;
+        scheduleAI();
     }
+}
+
+function scheduleAI() {
+    // 延迟 100ms 后检查是否可以走棋
+    setTimeout(() => {
+        if (!gameOver && currentPlayer === 'white' && !aiThinking && pendingAI) {
+            pendingAI = false;
+            aiPlay();
+        } else if (pendingAI) {
+            // 如果还没准备好，再等一次
+            scheduleAI();
+        }
+    }, 100);
 }
 
 // ========== AI ==========
