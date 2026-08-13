@@ -108,7 +108,7 @@
 
 <script>
 // ============================================================
-// 黑白棋 · 网页版（AI 支持双色）
+// 黑白棋 · 网页版（AI 双色通用）
 // ============================================================
 
 const canvas = document.getElementById('boardCanvas');
@@ -123,7 +123,7 @@ let winner = null;
 let legalMoves = [];
 let mode = 'medium';
 let aiThinking = false;
-let playerSide = 'black'; // 'black' 或 'white'
+let playerSide = 'black';
 
 const blackScoreSpan = document.getElementById('blackScore');
 const whiteScoreSpan = document.getElementById('whiteScore');
@@ -308,7 +308,6 @@ function aiPlayForColor(color) {
                 } else {
                     currentPlayer = opp;
                     legalMoves = om;
-                    // 如果轮到 AI，继续走（AI 只走 white，但我们已经通用）
                     if (currentPlayer === color) {
                         aiPlayForColor(color);
                         return;
@@ -320,7 +319,7 @@ function aiPlayForColor(color) {
     render();
 }
 
-// 点击触发的 AI（玩家走黑棋后，AI 走白棋）
+// 点击触发 AI（玩家走黑棋后，AI 走白棋）
 function aiPlay() {
     if (aiThinking || gameOver) return;
     if (currentPlayer !== 'white') return;
@@ -410,7 +409,6 @@ function render() {
 canvas.addEventListener('click', (e) => {
     if (gameOver || aiThinking) return;
     if (mode !== 'pvp') {
-        // 只有玩家侧才能点击
         if (currentPlayer !== playerSide) return;
     }
     const rect = canvas.getBoundingClientRect();
@@ -439,7 +437,6 @@ canvas.addEventListener('click', (e) => {
             }
         }
         render();
-        // AI 回合（AI 只走白棋）
         if (!gameOver && currentPlayer === 'white') {
             aiPlay();
         }
