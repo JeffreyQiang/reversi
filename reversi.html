@@ -411,7 +411,7 @@ canvas.addEventListener('click', (e) => {
             }
         }
         render();
-        // ⭐ 修复：只在非双人模式下触发 AI
+        // 关键修复：只在 AI 模式（非双人）且轮到白棋时触发 AI
         if (mode !== 'pvp' && !gameOver && currentPlayer === 'white') {
             aiPlay();
         }
@@ -430,6 +430,7 @@ function showMenu() {
     const choice = confirm('🎮 选择模式：\n\n「确定」→ 双人对战\n「取消」→ AI 难度选择');
     if (choice) {
         mode = 'pvp';
+        // 重置游戏，并确保双人模式下不会触发 AI
         initGame();
         render();
         return;
