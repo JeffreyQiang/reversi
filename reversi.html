@@ -44,7 +44,6 @@
             background: #0f3460;
             padding: 6px 18px;
             border-radius: 20px;
-            letter-spacing: 0.5px;
         }
         .info .turn {
             background: #0f3460;
@@ -103,7 +102,7 @@
 
 <script>
 // ============================================================
-// 黑白棋 · 双人模式优化版（无延迟）
+// 黑白棋 · 双人模式延迟修复（单次扫描优化）
 // ============================================================
 
 const canvas = document.getElementById('boardCanvas');
@@ -146,7 +145,7 @@ function posScore(r, c) {
     return 0;
 }
 
-// ========== 核心 ==========
+// ========== 核心（无重复扫描） ==========
 function getFlipPositions(row, col, player) {
     if (board[row][col] !== null) return [];
     const opp = getOpponent(player);
@@ -308,8 +307,7 @@ function aiPlay() {
     }, 120);
 }
 
-// ========== 渲染 ==========
-
+// ========== 渲染（只读 legalMoves，不重新计算） ==========
 function render() {
     const w = canvas.width, h = canvas.height;
     ctx.clearRect(0, 0, w, h);
@@ -382,12 +380,12 @@ function render() {
     modeBadge.textContent = modeNames[mode] || '🤖 中等';
 }
 
-// ========== 事件 ==========
-
-// ----- 双人模式（无延迟） -----
+// ========== 双人模式（无延迟，单次扫描） ==========
 function handlePvpClick(row, col) {
     if (gameOver) return;
     if (!legalMoves.some(([r, c]) => r === row && c === col)) return;
+
+    // 执行落子（只改 board，不计算走法）
     if (!makeMove(row, col, currentPlayer)) return;
 
     // 尝试切换到对手
@@ -404,13 +402,12 @@ function handlePvpClick(row, col) {
             legalMoves = [];
         } else {
             legalMoves = curMoves;
-            // currentPlayer 不变
         }
     }
     render();
 }
 
-// ----- AI 模式 -----
+// ========== AI 模式 ==========
 function handleAiClick(row, col) {
     if (gameOver || aiThinking) return;
     if (currentPlayer !== 'black') return;
@@ -433,6 +430,7 @@ function handleAiClick(row, col) {
     }
 }
 
+// ========== 事件 ==========
 canvas.addEventListener('click', (e) => {
     const rect = canvas.getBoundingClientRect();
     const scale = canvas.width / rect.width;
