@@ -102,8 +102,9 @@
 
 <script>
 // ============================================================
-// 原封不动照搬你的 Pygame 黑白棋逻辑 + AI
-// 外观、棋盘、棋子、计分、走法、AI 全部对应你的 exe
+// 黑白棋 · 网页版
+// 逻辑完全对应你的 Pygame 版本
+// 困难 AI 已加入 simulate_move（防雷区 + 防对手占角）
 // ============================================================
 
 const canvas = document.getElementById('boardCanvas');
@@ -216,7 +217,7 @@ function initGame() {
     render();
 }
 
-// ========== AI（照搬你的算法） ==========
+// ========== AI ==========
 
 function simulateMove(row, col) {
     const oldBoard = board.map(row => [...row]);
@@ -235,11 +236,6 @@ function simulateMove(row, col) {
     return score;
 }
 
-function evaluateMove(row, col) {
-    const flips = getFlipPositions(row, col, 'white');
-    return flips.length - simulateMove(row, col) * 0.8 + posScore(row, col);
-}
-
 function aiPlay() {
     if (aiThinking || gameOver || currentPlayer !== 'white') return;
     aiThinking = true;
@@ -250,25 +246,29 @@ function aiPlay() {
         let bestMove = moves[0];
         for (const [r, c] of moves) {
             let s;
-            if (mode === 'easy') s = getFlipPositions(r, c, 'white').length;
-            else if (mode === 'medium') s = evaluateMove(r, c);
-            else { // hard
-                const old = board.map(row => [...row]);
+            if (mode === 'easy') {
+                s = getFlipPositions(r, c, 'white').length;
+            } else if (mode === 'medium') {
+                s = getFlipPositions(r, c, 'white').length - simulateMove(r, c) * 0.8 + posScore(r, c);
+            } else { // hard
+                const oldBoard = board.map(row => [...row]);
                 board[r][c] = 'white';
-                for (const [fr, fc] of getFlipPositions(r, c, 'white')) board[fr][fc] = 'white';
-                let ws = 0, bs = 0;
-                for (let i = 0; i < SIZE; i++) {
-                    for (let j = 0; j < SIZE; j++) {
-                        if (board[i][j] === 'white') ws += 1 + posScore(i, j);
-                        else if (board[i][j] === 'black') bs += 1 + posScore(i, j);
-                    }
+                const flips = getFlipPositions(r, c, 'white');
+                for (const [fr, fc] of flips) board[fr][fc] = 'white';
+                let myScore = flips.length + posScore(r, c);
+                let oppBest = -9999;
+                const oppMoves = getLegalMoves('black');
+                for (const [or2, oc2] of oppMoves) {
+                    const oppFlips = getFlipPositions(or2, oc2, 'black');
+                    let oppScore = oppFlips.length + posScore(or2, oc2);
+                    if (oppScore > oppBest) oppBest = oppScore;
                 }
-                board = old;
-                s = ws - bs;
+                s = myScore - oppBest * 0.8;
+                board = oldBoard;
             }
             if (s > bestScore) { bestScore = s; bestMove = [r, c]; }
         }
-        if (makeMove(bestMove[0], bestMove[1], 'white')) {
+        if (bestMove && makeMove(bestMove[0], bestMove[1], 'white')) {
             if (!checkGameOver()) {
                 currentPlayer = 'black';
                 legalMoves = getLegalMoves(currentPlayer);
@@ -285,7 +285,7 @@ function aiPlay() {
     }, 120);
 }
 
-// ========== 渲染（照搬你的颜色和布局） ==========
+// ========== 渲染 ==========
 
 function render() {
     const w = canvas.width, h = canvas.height;
