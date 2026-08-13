@@ -103,22 +103,22 @@
 <script>
 // ============================================================
 // 黑白棋 · 网页版
-// 逻辑完全对应你的 Pygame 版本
-// 困难 AI 已加入 simulate_move（防雷区 + 防对手占角）
+// 困难 AI 已修复：
+// 1. 主动堵你下一步占角
+// 2. 你没棋走时自动跳过，AI 继续走
 // ============================================================
 
 const canvas = document.getElementById('boardCanvas');
 const ctx = canvas.getContext('2d');
 const SIZE = 8;
 const CELL = 70;
-const OFFSET = 0;
 
 let board = Array.from({ length: SIZE }, () => Array(SIZE).fill(null));
 let currentPlayer = 'black';
 let gameOver = false;
 let winner = null;
 let legalMoves = [];
-let mode = 'medium'; // 'easy', 'medium', 'hard'
+let mode = 'medium';
 let aiThinking = false;
 
 const blackScoreSpan = document.getElementById('blackScore');
@@ -241,7 +241,12 @@ function aiPlay() {
     aiThinking = true;
     setTimeout(() => {
         const moves = getLegalMoves('white');
-        if (!moves.length) { currentPlayer = 'black'; aiThinking = false; render(); return; }
+        if (!moves.length) {
+            currentPlayer = 'black';
+            aiThinking = false;
+            render();
+            return;
+        }
         let bestScore = -9999;
         let bestMove = moves[0];
         for (const [r, c] of moves) {
@@ -250,7 +255,8 @@ function aiPlay() {
                 s = getFlipPositions(r, c, 'white').length;
             } else if (mode === 'medium') {
                 s = getFlipPositions(r, c, 'white').length - simulateMove(r, c) * 0.8 + posScore(r, c);
-            } else { // hard
+            } else {
+                // ===== 困难 AI（完整版） =====
                 const oldBoard = board.map(row => [...row]);
                 board[r][c] = 'white';
                 const flips = getFlipPositions(r, c, 'white');
@@ -263,20 +269,43 @@ function aiPlay() {
                     let oppScore = oppFlips.length + posScore(or2, oc2);
                     if (oppScore > oppBest) oppBest = oppScore;
                 }
+                // ===== 新增：检测对手下一步是否能走角 =====
+                let oppNextBest = -9999;
+                for (const [or2, oc2] of getLegalMoves('black')) {
+                    const oppNextScore = getFlipPositions(or2, oc2, 'black').length + posScore(or2, oc2);
+                    if (oppNextScore > oppNextBest) oppNextBest = oppNextScore;
+                }
                 s = myScore - oppBest * 0.8;
+                // 如果对手下一步能走角，大幅度扣分
+                if (oppNextBest >= 10) s -= 20;
                 board = oldBoard;
             }
-            if (s > bestScore) { bestScore = s; bestMove = [r, c]; }
+            if (s > bestScore) {
+                bestScore = s;
+                bestMove = [r, c];
+            }
         }
         if (bestMove && makeMove(bestMove[0], bestMove[1], 'white')) {
             if (!checkGameOver()) {
                 currentPlayer = 'black';
                 legalMoves = getLegalMoves(currentPlayer);
+                // 检查黑棋是否有合法走法，没有则跳过
                 if (!legalMoves.length) {
                     const opp = getOpponent(currentPlayer);
                     const om = getLegalMoves(opp);
-                    if (!om.length) checkGameOver();
-                    else currentPlayer = opp;
+                    if (!om.length) {
+                        checkGameOver();
+                    } else {
+                        currentPlayer = opp;
+                        legalMoves = om;
+                        // 如果轮到白棋（AI），继续走
+                        if (currentPlayer === 'white') {
+                            aiThinking = false;
+                            aiPlay();
+                            render();
+                            return;
+                        }
+                    }
                 }
             }
         }
@@ -374,13 +403,28 @@ canvas.addEventListener('click', (e) => {
     if (makeMove(row, col, currentPlayer)) {
         if (!checkGameOver()) {
             const opp = getOpponent(currentPlayer);
-            if (getLegalMoves(opp).length) currentPlayer = opp;
-            else {
-                if (getLegalMoves(currentPlayer).length === 0) checkGameOver();
+            if (getLegalMoves(opp).length) {
+                currentPlayer = opp;
+            } else {
+                // 对手无棋可走，跳过
+                if (getLegalMoves(currentPlayer).length === 0) {
+                    checkGameOver();
+                } else {
+                    // 跳过对手回合，当前玩家继续
+                    // 但当前玩家已经是 opp，要换回来
+                    currentPlayer = opp;
+                    const nextMoves = getLegalMoves(currentPlayer);
+                    if (nextMoves.length === 0) {
+                        checkGameOver();
+                    }
+                }
             }
         }
         render();
-        if (!gameOver && currentPlayer === 'white') aiPlay();
+        // 如果轮到白棋（AI）且游戏未结束，触发 AI
+        if (!gameOver && currentPlayer === 'white') {
+            aiPlay();
+        }
     }
 });
 
