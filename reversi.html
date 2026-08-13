@@ -103,7 +103,7 @@
 
 <script>
 // ============================================================
-// 黑白棋 · 双人模式修复版（第一回合不再卡死）
+// 黑白棋 · 双人模式优化版（无延迟）
 // ============================================================
 
 const canvas = document.getElementById('boardCanvas');
@@ -384,54 +384,39 @@ function render() {
 
 // ========== 事件 ==========
 
-// ----- 双人模式：先刷新 legalMoves，再跳过 -----
+// ----- 双人模式（无延迟） -----
 function handlePvpClick(row, col) {
     if (gameOver) return;
     if (!legalMoves.some(([r, c]) => r === row && c === col)) return;
-
     if (!makeMove(row, col, currentPlayer)) return;
 
-    // ① 先刷新当前玩家的合法走法（因为 makeMove 不切换玩家）
-    legalMoves = getLegalMoves(currentPlayer);
-
-    // ② 循环处理跳过回合
-    while (true) {
-        let next = getOpponent(currentPlayer);
-        let nextMoves = getLegalMoves(next);
-        if (nextMoves.length > 0) {
-            // 对手有走法，切换
-            currentPlayer = next;
-            legalMoves = nextMoves;
-            break;
+    // 尝试切换到对手
+    let next = getOpponent(currentPlayer);
+    let nextMoves = getLegalMoves(next);
+    if (nextMoves.length > 0) {
+        currentPlayer = next;
+        legalMoves = nextMoves;
+    } else {
+        // 对手无走法，检查当前玩家是否还有走法
+        let curMoves = getLegalMoves(currentPlayer);
+        if (curMoves.length === 0) {
+            checkGameOver();
+            legalMoves = [];
         } else {
-            // 对手无走法，检查当前玩家是否还有走法
-            let curMoves = getLegalMoves(currentPlayer);
-            if (curMoves.length === 0) {
-                // 双方都无走法，游戏结束
-                checkGameOver();
-                legalMoves = [];
-                render();
-                return;
-            } else {
-                // 当前玩家继续下（不切换）
-                legalMoves = curMoves;
-                break;
-            }
+            legalMoves = curMoves;
+            // currentPlayer 不变
         }
     }
     render();
 }
 
-// ----- AI 模式的点击处理（玩家执黑，AI 执白） -----
+// ----- AI 模式 -----
 function handleAiClick(row, col) {
     if (gameOver || aiThinking) return;
     if (currentPlayer !== 'black') return;
     if (!legalMoves.some(([r, c]) => r === row && c === col)) return;
 
     if (makeMove(row, col, currentPlayer)) {
-        // 立即更新合法走法
-        legalMoves = getLegalMoves(currentPlayer);
-        // 切换玩家（含跳过）
         let next = getOpponent(currentPlayer);
         if (getLegalMoves(next).length > 0) {
             currentPlayer = next;
