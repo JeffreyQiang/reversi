@@ -2,8 +2,8 @@
 <html lang="zh">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>黑白棋 · 流畅版</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>黑白棋 · 最终版</title>
     <style>
         body { margin:0; min-height:100vh; background:#1a1a2e; display:flex; justify-content:center; align-items:center; font-family:'Segoe UI',Arial,sans-serif; }
         .container { background:#16213e; padding:20px; border-radius:8px; box-shadow:0 8px 32px rgba(0,0,0,0.6); }
@@ -16,6 +16,7 @@
         .controls button { background:#1a3a5e; border:none; border-radius:30px; color:white; font-size:16px; font-weight:600; padding:8px 28px; cursor:pointer; transition:0.1s ease; box-shadow:0 4px 0 #0a1a2e; }
         .controls button:active { transform:translateY(4px); box-shadow:none; }
         .controls button.menu { background:#5a3a3a; box-shadow:0 4px 0 #2a1a1a; }
+        @media (max-width: 480px) { .container { padding:12px; } }
     </style>
 </head>
 <body>
@@ -34,7 +35,7 @@
 
 <script>
 // ============================================================
-// 黑白棋 · 零延迟版（无异步，无锁）
+// 黑白棋 · 最终完整版（修复触碰判定）
 // ============================================================
 
 const canvas = document.getElementById('boardCanvas');
@@ -77,7 +78,7 @@ function posScore(r, c) {
     return 0;
 }
 
-// ========== 核心（同步执行） ==========
+// ========== 核心 ==========
 function getFlipPositions(row, col, player) {
     if (board[row][col] !== null) return [];
     const opp = getOpponent(player);
@@ -145,8 +146,7 @@ function initGame() {
     render();
 }
 
-// ========== AI ==========
-
+// ========== AI（同步无延迟） ==========
 function simulateMove(row, col) {
     const oldBoard = board.map(row => [...row]);
     board[row][col] = 'white';
@@ -164,7 +164,6 @@ function simulateMove(row, col) {
     return score;
 }
 
-// ----- 同步 AI（无 setTimeout） -----
 function aiPlaySync() {
     if (aiThinking || gameOver) return;
     if (currentPlayer !== 'white') return;
@@ -311,14 +310,13 @@ function render() {
     modeBadge.textContent = modeNames[mode] || '🤖 中等';
 }
 
-// ========== 双人模式（无异步） ==========
+// ========== 双人模式 ==========
 function handlePvpClick(row, col) {
     if (gameOver) return;
     if (!legalMoves.some(([r, c]) => r === row && c === col)) return;
 
     if (!makeMove(row, col, currentPlayer)) return;
 
-    // 切换玩家（含跳过）
     let next = getOpponent(currentPlayer);
     let nextMoves = getLegalMoves(next);
     if (nextMoves.length > 0) {
@@ -336,7 +334,7 @@ function handlePvpClick(row, col) {
     render();
 }
 
-// ========== AI 模式（无异步） ==========
+// ========== AI 模式 ==========
 function handleAiClick(row, col) {
     if (gameOver || aiThinking) return;
     if (currentPlayer !== 'black') return;
@@ -364,14 +362,18 @@ function handleAiClick(row, col) {
     }
 }
 
-// ========== 事件 ==========
+// ========== 事件（修复触碰判定） ==========
 canvas.addEventListener('click', (e) => {
     const rect = canvas.getBoundingClientRect();
     const scale = canvas.width / rect.width;
     const x = (e.clientX - rect.left) * scale;
     const y = (e.clientY - rect.top) * scale;
-    const col = Math.round(x / CELL);
-    const row = Math.round(y / CELL);
+
+    // 用 round 取最近格子中心（修复只有左上角能点的问题）
+    let col = Math.round(x / CELL);
+    let row = Math.round(y / CELL);
+
+    // 边界裁剪，确保在 0~7 范围内
     if (row < 0 || row >= SIZE || col < 0 || col >= SIZE) return;
 
     if (mode === 'pvp') {
