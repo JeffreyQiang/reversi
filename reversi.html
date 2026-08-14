@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>黑白棋 · 最终优化</title>
+    <title>黑白棋 · 流畅版</title>
     <style>
         body { margin:0; min-height:100vh; background:#1a1a2e; display:flex; justify-content:center; align-items:center; font-family:'Segoe UI',Arial,sans-serif; }
         .container { background:#16213e; padding:20px; border-radius:8px; box-shadow:0 8px 32px rgba(0,0,0,0.6); }
@@ -34,7 +34,7 @@
 
 <script>
 // ============================================================
-// 黑白棋 · 双人模式零延迟版
+// 黑白棋 · 零延迟版（无异步，无锁）
 // ============================================================
 
 const canvas = document.getElementById('boardCanvas');
@@ -77,7 +77,7 @@ function posScore(r, c) {
     return 0;
 }
 
-// ========== 核心（无冗余扫描） ==========
+// ========== 核心（同步执行） ==========
 function getFlipPositions(row, col, player) {
     if (board[row][col] !== null) return [];
     const opp = getOpponent(player);
@@ -117,9 +117,10 @@ function makeMove(row, col, player) {
     return true;
 }
 
-// ---- 优化：不再内部重复计算走法 ----
-function checkGameOver(whiteMoves, blackMoves) {
-    if (whiteMoves.length === 0 && blackMoves.length === 0) {
+function checkGameOver() {
+    const wm = getLegalMoves('white');
+    const bm = getLegalMoves('black');
+    if (wm.length === 0 && bm.length === 0) {
         gameOver = true;
         const cnt = countPieces();
         if (cnt.black > cnt.white) winner = 'black';
@@ -163,84 +164,81 @@ function simulateMove(row, col) {
     return score;
 }
 
-function aiPlay() {
+// ----- 同步 AI（无 setTimeout） -----
+function aiPlaySync() {
     if (aiThinking || gameOver) return;
     if (currentPlayer !== 'white') return;
     aiThinking = true;
-    setTimeout(() => {
-        const moves = getLegalMoves('white');
-        if (!moves.length) {
-            currentPlayer = 'black';
-            legalMoves = getLegalMoves(currentPlayer);
-            const whiteMoves = [];
-            const blackMoves = legalMoves;
-            checkGameOver(whiteMoves, blackMoves);
-            aiThinking = false;
-            render();
-            return;
-        }
-        let bestScore = -9999;
-        let bestMove = moves[0];
-        for (const [r, c] of moves) {
-            let s;
-            if (mode === 'easy') {
-                s = getFlipPositions(r, c, 'white').length;
-            } else if (mode === 'medium') {
-                s = getFlipPositions(r, c, 'white').length - simulateMove(r, c) * 0.8 + posScore(r, c);
-            } else {
-                const oldBoard = board.map(row => [...row]);
-                board[r][c] = 'white';
-                const flips = getFlipPositions(r, c, 'white');
-                for (const [fr, fc] of flips) board[fr][fc] = 'white';
-                let myScore = flips.length + posScore(r, c);
-                let oppBest = -9999;
-                const oppMoves = getLegalMoves('black');
-                for (const [or2, oc2] of oppMoves) {
-                    const oppFlips = getFlipPositions(or2, oc2, 'black');
-                    let oppScore = oppFlips.length + posScore(or2, oc2);
-                    if (oppScore > oppBest) oppBest = oppScore;
-                }
-                let oppNextBest = -9999;
-                for (const [or2, oc2] of getLegalMoves('black')) {
-                    const oppNextScore = getFlipPositions(or2, oc2, 'black').length + posScore(or2, oc2);
-                    if (oppNextScore > oppNextBest) oppNextBest = oppNextScore;
-                }
-                s = myScore - oppBest * 0.8;
-                if (oppNextBest >= 10) s -= 20;
-                board = oldBoard;
-            }
-            if (s > bestScore) {
-                bestScore = s;
-                bestMove = [r, c];
-            }
-        }
-        if (bestMove && makeMove(bestMove[0], bestMove[1], 'white')) {
-            currentPlayer = 'black';
-            legalMoves = getLegalMoves(currentPlayer);
-            const whiteMoves = getLegalMoves('white');
-            const blackMoves = legalMoves;
-            if (!checkGameOver(whiteMoves, blackMoves)) {
-                if (blackMoves.length === 0) {
-                    currentPlayer = 'white';
-                    legalMoves = getLegalMoves(currentPlayer);
-                    const wm2 = legalMoves;
-                    const bm2 = getLegalMoves('black');
-                    checkGameOver(wm2, bm2);
-                    if (!gameOver && currentPlayer === 'white') {
-                        aiThinking = false;
-                        aiPlay();
-                        render();
-                        return;
-                    }
-                }
-            }
-        }
+
+    const moves = getLegalMoves('white');
+    if (!moves.length) {
+        currentPlayer = 'black';
+        legalMoves = getLegalMoves(currentPlayer);
+        checkGameOver();
         aiThinking = false;
         render();
-    }, 120);
+        return;
+    }
+    let bestScore = -9999;
+    let bestMove = moves[0];
+    for (const [r, c] of moves) {
+        let s;
+        if (mode === 'easy') {
+            s = getFlipPositions(r, c, 'white').length;
+        } else if (mode === 'medium') {
+            s = getFlipPositions(r, c, 'white').length - simulateMove(r, c) * 0.8 + posScore(r, c);
+        } else {
+            const oldBoard = board.map(row => [...row]);
+            board[r][c] = 'white';
+            const flips = getFlipPositions(r, c, 'white');
+            for (const [fr, fc] of flips) board[fr][fc] = 'white';
+            let myScore = flips.length + posScore(r, c);
+            let oppBest = -9999;
+            const oppMoves = getLegalMoves('black');
+            for (const [or2, oc2] of oppMoves) {
+                const oppFlips = getFlipPositions(or2, oc2, 'black');
+                let oppScore = oppFlips.length + posScore(or2, oc2);
+                if (oppScore > oppBest) oppBest = oppScore;
+            }
+            let oppNextBest = -9999;
+            for (const [or2, oc2] of getLegalMoves('black')) {
+                const oppNextScore = getFlipPositions(or2, oc2, 'black').length + posScore(or2, oc2);
+                if (oppNextScore > oppNextBest) oppNextBest = oppNextScore;
+            }
+            s = myScore - oppBest * 0.8;
+            if (oppNextBest >= 10) s -= 20;
+            board = oldBoard;
+        }
+        if (s > bestScore) {
+            bestScore = s;
+            bestMove = [r, c];
+        }
+    }
+    if (bestMove && makeMove(bestMove[0], bestMove[1], 'white')) {
+        currentPlayer = 'black';
+        legalMoves = getLegalMoves(currentPlayer);
+        if (!legalMoves.length) {
+            const opp = getOpponent(currentPlayer);
+            const om = getLegalMoves(opp);
+            if (!om.length) {
+                checkGameOver();
+            } else {
+                currentPlayer = opp;
+                legalMoves = om;
+                if (currentPlayer === 'white') {
+                    aiThinking = false;
+                    aiPlaySync();
+                    render();
+                    return;
+                }
+            }
+        }
+    }
+    aiThinking = false;
+    render();
 }
 
-// ========== 渲染（只读，不计算） ==========
+// ========== 渲染 ==========
 function render() {
     const w = canvas.width, h = canvas.height;
     ctx.clearRect(0, 0, w, h);
@@ -313,23 +311,23 @@ function render() {
     modeBadge.textContent = modeNames[mode] || '🤖 中等';
 }
 
-// ========== 双人模式（单次扫描） ==========
+// ========== 双人模式（无异步） ==========
 function handlePvpClick(row, col) {
     if (gameOver) return;
     if (!legalMoves.some(([r, c]) => r === row && c === col)) return;
 
     if (!makeMove(row, col, currentPlayer)) return;
 
-    // 计算一次双方走法
+    // 切换玩家（含跳过）
     let next = getOpponent(currentPlayer);
     let nextMoves = getLegalMoves(next);
-    let curMoves = getLegalMoves(currentPlayer);
     if (nextMoves.length > 0) {
         currentPlayer = next;
         legalMoves = nextMoves;
     } else {
+        let curMoves = getLegalMoves(currentPlayer);
         if (curMoves.length === 0) {
-            checkGameOver([], []);
+            checkGameOver();
             legalMoves = [];
         } else {
             legalMoves = curMoves;
@@ -338,31 +336,31 @@ function handlePvpClick(row, col) {
     render();
 }
 
-// ========== AI 模式 ==========
+// ========== AI 模式（无异步） ==========
 function handleAiClick(row, col) {
     if (gameOver || aiThinking) return;
     if (currentPlayer !== 'black') return;
     if (!legalMoves.some(([r, c]) => r === row && c === col)) return;
 
-    if (makeMove(row, col, currentPlayer)) {
-        let next = getOpponent(currentPlayer);
-        let nextMoves = getLegalMoves(next);
+    if (!makeMove(row, col, currentPlayer)) return;
+
+    let next = getOpponent(currentPlayer);
+    let nextMoves = getLegalMoves(next);
+    if (nextMoves.length > 0) {
+        currentPlayer = next;
+        legalMoves = nextMoves;
+    } else {
         let curMoves = getLegalMoves(currentPlayer);
-        if (nextMoves.length > 0) {
-            currentPlayer = next;
-            legalMoves = nextMoves;
+        if (curMoves.length === 0) {
+            checkGameOver();
+            legalMoves = [];
         } else {
-            if (curMoves.length === 0) {
-                checkGameOver([], []);
-                legalMoves = [];
-            } else {
-                legalMoves = curMoves;
-            }
+            legalMoves = curMoves;
         }
-        render();
-        if (!gameOver && currentPlayer === 'white') {
-            aiPlay();
-        }
+    }
+    render();
+    if (!gameOver && currentPlayer === 'white') {
+        aiPlaySync();
     }
 }
 
