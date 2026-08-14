@@ -365,16 +365,20 @@ function handleAiClick(row, col) {
 // ========== 事件（修复触碰判定） ==========
 canvas.addEventListener('click', (e) => {
     const rect = canvas.getBoundingClientRect();
-    const scale = canvas.width / rect.width;
-    const x = (e.clientX - rect.left) * scale;
-    const y = (e.clientY - rect.top) * scale;
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const x = (e.clientX - rect.left) * scaleX;
+    const y = (e.clientY - rect.top) * scaleY;
 
-    // 用 round 取最近格子中心（修复只有左上角能点的问题）
-    let col = Math.round(x / CELL);
-    let row = Math.round(y / CELL);
+    // 使用 Math.floor 保证点击在格子区域内都能映射到正确索引
+    let col = Math.floor(x / CELL);
+    let row = Math.floor(y / CELL);
 
     // 边界裁剪，确保在 0~7 范围内
-    if (row < 0 || row >= SIZE || col < 0 || col >= SIZE) return;
+    if (row < 0) row = 0;
+    if (row >= SIZE) row = SIZE - 1;
+    if (col < 0) col = 0;
+    if (col >= SIZE) col = SIZE - 1;
 
     if (mode === 'pvp') {
         handlePvpClick(row, col);
