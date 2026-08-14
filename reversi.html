@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>黑白棋 · 手机适配版</title>
+    <title>黑白棋 · 防角评估版</title>
     <style>
         * { box-sizing: border-box; }
         body {
@@ -126,13 +126,13 @@
 
 <script>
 // ============================================================
-// 黑白棋 · 手机自适应版
+// 黑白棋 · 防角评估版（无搜索）
 // ============================================================
 
 const canvas = document.getElementById('boardCanvas');
 const ctx = canvas.getContext('2d');
 const SIZE = 8;
-const CELL_SIZE = 560 / SIZE; // 70
+const CELL_SIZE = 560 / SIZE;
 
 let board = Array.from({ length: SIZE }, () => Array(SIZE).fill(null));
 let currentPlayer = 'black';
@@ -147,7 +147,6 @@ const whiteScoreSpan = document.getElementById('whiteScore');
 const turnIndicator = document.getElementById('turnIndicator');
 const modeBadge = document.getElementById('modeBadge');
 
-// ========== 工具 ==========
 function getOpponent(p) { return p === 'black' ? 'white' : 'black'; }
 
 function countPieces() {
@@ -163,13 +162,7 @@ function countPieces() {
 
 function isCorner(r, c) { return (r === 0 || r === 7) && (c === 0 || c === 7); }
 function isSide(r, c) { return r === 0 || r === 7 || c === 0 || c === 7; }
-function posScore(r, c) {
-    if (isCorner(r, c)) return 10;
-    if (isSide(r, c)) return 4;
-    return 0;
-}
 
-// ========== 核心 ==========
 function getFlipPositions(row, col, player) {
     if (board[row][col] !== null) return [];
     const opp = getOpponent(player);
@@ -237,7 +230,6 @@ function initGame() {
     render();
 }
 
-// ========== AI ==========
 function simulateMove(row, col) {
     const oldBoard = board.map(row => [...row]);
     board[row][col] = 'white';
@@ -269,34 +261,54 @@ function aiPlaySync() {
         render();
         return;
     }
-    let bestScore = -9999;
+    let bestScore = -999999;
     let bestMove = moves[0];
     for (const [r, c] of moves) {
         let s;
         if (mode === 'easy') {
             s = getFlipPositions(r, c, 'white').length;
         } else if (mode === 'medium') {
-            s = getFlipPositions(r, c, 'white').length - simulateMove(r, c) * 0.8 + posScore(r, c);
-        } else {
+            s = getFlipPositions(r, c, 'white').length - simulateMove(r, c) * 0.8 +
+                (isCorner(r, c) ? 10 : (isSide(r, c) ? 4 : 0));
+        } else { // hard - 纯评估防角
             const oldBoard = board.map(row => [...row]);
             board[r][c] = 'white';
             const flips = getFlipPositions(r, c, 'white');
             for (const [fr, fc] of flips) board[fr][fc] = 'white';
-            let myScore = flips.length + posScore(r, c);
-            let oppBest = -9999;
+
+            // 计算当前棋盘双方的角数、边数、棋子数
+            let myCorners = 0, oppCorners = 0, myEdges = 0, oppEdges = 0, myPieces = 0, oppPieces = 0;
+            for (let i = 0; i < SIZE; i++) {
+                for (let j = 0; j < SIZE; j++) {
+                    if (board[i][j] === 'white') {
+                        myPieces++;
+                        if (isCorner(i, j)) myCorners++;
+                        else if (isSide(i, j)) myEdges++;
+                    } else if (board[i][j] === 'black') {
+                        oppPieces++;
+                        if (isCorner(i, j)) oppCorners++;
+                        else if (isSide(i, j)) oppEdges++;
+                    }
+                }
+            }
+
+            // 检查对手下一步是否有占角机会
+            let oppCornerThreat = false;
             const oppMoves = getLegalMoves('black');
             for (const [or2, oc2] of oppMoves) {
-                const oppFlips = getFlipPositions(or2, oc2, 'black');
-                let oppScore = oppFlips.length + posScore(or2, oc2);
-                if (oppScore > oppBest) oppBest = oppScore;
+                if (isCorner(or2, oc2)) {
+                    oppCornerThreat = true;
+                    break;
+                }
             }
-            let oppNextBest = -9999;
-            for (const [or2, oc2] of getLegalMoves('black')) {
-                const oppNextScore = getFlipPositions(or2, oc2, 'black').length + posScore(or2, oc2);
-                if (oppNextScore > oppNextBest) oppNextBest = oppNextScore;
-            }
-            s = myScore - oppBest * 0.8;
-            if (oppNextBest >= 10) s -= 20;
+
+            // 评分：角权重极高，对手角权重更高（防送角）
+            s = myPieces * 0.5 + myCorners * 50 + myEdges * 3
+              - oppPieces * 0.5 - oppCorners * 80 - oppEdges * 5;
+
+            if (oppCornerThreat) s -= 50;
+            if (isCorner(r, c)) s += 60;
+
             board = oldBoard;
         }
         if (s > bestScore) {
@@ -328,7 +340,6 @@ function aiPlaySync() {
     render();
 }
 
-// ========== 渲染 ==========
 function render() {
     const w = canvas.width, h = canvas.height;
     const cell = w / SIZE;
@@ -402,11 +413,9 @@ function render() {
     modeBadge.textContent = modeNames[mode] || '🤖 中等';
 }
 
-// ========== 双人模式 ==========
 function handlePvpClick(row, col) {
     if (gameOver) return;
     if (!legalMoves.some(([r, c]) => r === row && c === col)) return;
-
     if (!makeMove(row, col, currentPlayer)) return;
 
     let next = getOpponent(currentPlayer);
@@ -426,7 +435,6 @@ function handlePvpClick(row, col) {
     render();
 }
 
-// ========== AI 模式 ==========
 function handleAiClick(row, col) {
     if (gameOver || aiThinking) return;
     if (currentPlayer !== 'black') return;
@@ -454,7 +462,6 @@ function handleAiClick(row, col) {
     }
 }
 
-// ========== 事件（手机适配） ==========
 canvas.addEventListener('click', (e) => {
     const rect = canvas.getBoundingClientRect();
     const scaleX = canvas.width / rect.width;
